@@ -20,16 +20,16 @@ namespace WindowsFormsApplication7
 
         DataSet ExcelImport;
 
-        #region Excel
+        #region ExcelImport
 
-        private string GetConnectionString()
+        private string GetConnectionString(string filePath)
         {
             Dictionary<string, string> props = new Dictionary<string, string>();
 
             // XLSX - Excel 2007, 2010, 2012, 2013
             props["Provider"] = "Microsoft.ACE.OLEDB.12.0;";
             props["Extended Properties"] = "Excel 12.0 XML";
-            props["Data Source"] = @"D:\Users\pretoriusc\Desktop\Project Temp Folder\Navisworks QTY\NW qty Export.xlsx";
+            props["Data Source"] = filePath;
 
             // XLS - Excel 2003 and Older
             //props["Provider"] = "Microsoft.Jet.OLEDB.4.0";
@@ -49,11 +49,11 @@ namespace WindowsFormsApplication7
             return sb.ToString();
         }
 
-        private DataSet ReadExcelFile()
+        private DataSet ReadExcelFile(string filePath)
         {
             DataSet ds = new DataSet();
 
-            string connectionString = GetConnectionString();
+            string connectionString = GetConnectionString(filePath);
 
             using (OleDbConnection conn = new OleDbConnection(connectionString))
             {
@@ -99,129 +99,329 @@ namespace WindowsFormsApplication7
         }
         #endregion
 
-        private void button1_Click(object sender, EventArgs e)
-        {
-            ExcelImport = ReadExcelFile();
+        #region Variables
 
-            foreach (DataTable dt in ExcelImport.Tables)
+        List<DataTable> Tables = new List<DataTable>();
+        List<DataRow> RawItemsData = new List<DataRow>();
+
+        List<string> Hierarchy = new List<string>();
+        List<string> RawItemsHeaders = new List<string>();
+        List<string> SelectedHeaders = new List<string>();
+
+        #endregion
+
+        void InitializeImport()
+        {
+            foreach(DataTable dt in ExcelImport.Tables)
             {
-                lstTables.Items.Add(dt.TableName);
+                Tables.Add(dt);
             }
 
-        }
-
-        private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            lstColumns.Items.Clear();
-
-
-            foreach (DataColumn dc in ExcelImport.Tables[lstTables.SelectedItem.ToString()].Columns)
+            if(Tables.Where(w => w.TableName == "Items Raw").Count() != 0)
             {
-                lstColumns.Items.Add(dc.ColumnName);
+
+                lstStatus.Items.Add("\"Items Raw\" sheet found...");
+
+                foreach(DataColumn dc in ExcelImport.Tables["Items Raw"].Columns)
+                {
+                    RawItemsHeaders.Add(dc.ColumnName);
+                }
+                
+                int i = 1;
+
+                while(i > 0)
+                {
+                    if(RawItemsHeaders.Contains("Group"+i.ToString()))
+                    {
+                        Hierarchy.Add("Group" + i.ToString());
+                        i += 1;
+                    }
+                    else
+                    {
+                        i = 0;
+                    }
+                }
+
+                if(Hierarchy.Count > 0)
+                {
+                    if (RawItemsHeaders.Contains("Item"))
+                        Hierarchy.Add("Item");
+                    else
+                        lstStatus.Items.Add("No \"Item\" header found...");
+                    
+
+                    if (RawItemsHeaders.Contains("Object")) 
+                        Hierarchy.Add("Object");
+                    else
+                        lstStatus.Items.Add("No \"Object\" header found...");
+
+                    foreach(DataRow dr in ExcelImport.Tables["Items Raw"].Rows)
+                    {
+                        RawItemsData.Add(dr);
+                    }
+                    lstStatus.Items.Add("Hierarchy load successful...");
+                }
+                else
+                {
+                    lstStatus.Items.Add("No \"Group\" headers found. Please make sure the file exported correctly...");
+                    MessageBox.Show("No headers found to group data. Please make sure that the file exported correctly.");
+                }
+
+                if (RawItemsHeaders.Contains("PrimaryQuantity")) SelectedHeaders.Add("PrimaryQuantity");
+                else
+                {
+                    MessageBox.Show("Could not find \"PrimaryQuantity\" header.");
+                }
+
+                if (RawItemsHeaders.Contains("PrimaryQuantity Units")) SelectedHeaders.Add("PrimaryQuantity Units");
+                else
+                {
+                    MessageBox.Show("Could not find \"PrimaryQuantity Units\" header.");
+                }
+            }
+            else
+            {
+                MessageBox.Show("Sheet: \"Raw Items\" not found in loaded spreadsheet.\nPlease make sure that the correct file is loaded and that the data exported correctly.");
+                lstStatus.Items.Add("\"Items Raw\" sheet not found...");
             }
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        void UpdateUI()
         {
-            lstGroups.Items.Add(lstColumns.SelectedItem.ToString());
-        }
 
-        private void button4_Click(object sender, EventArgs e)
-        {
-            listBox6.Items.Clear();
+            lstGroups.DataSource = null;
+            lstHeaders.DataSource = null;
+            lstColumns.DataSource = null;
 
-            //create a real list of data rows
-            List<DataRow> TableRows = new List<DataRow>();
-            foreach(DataRow dr in ExcelImport.Tables[lstTables.SelectedItem.ToString()].Rows)
-            {
-                TableRows.Add(dr);
+            lstGroups.DataSource = Hierarchy;
+            lstHeaders.DataSource = SelectedHeaders;
+            lstColumns.DataSource = RawItemsHeaders.Where(w => !SelectedHeaders.Contains(w) && !Hierarchy.Contains(w)).ToList();
+
+            lvDataView.Columns.Clear();
+
+            lvDataView.Columns.Add("Level", 50);
+            lvDataView.Columns.Add("Bill Item", 250);
+
+            foreach(string s in SelectedHeaders)
+            {                
+                lvDataView.Columns.Add(s, TextRenderer.MeasureText(s, this.Font).Width+5);
             }
-
+        }
+        
+        void TraverseData()
+        {
             #region Initialize Iteration Variables
-            int Level = 0;
-            int maxLevel = lstGroups.Items.Count - 1;
-            int MaxSize = lstGroups.Items.Count;
+            int Level = 0; //Indicates current level of hierarchy iteration
+            int maxLevel = Hierarchy.Count - 1; //Highest level that can be iterated
+            int MaxSize = Hierarchy.Count; //Maximum array size based on hierarchy levels
 
-            Queue<string>[] DataTree = new Queue<string>[MaxSize];
+            Queue<string>[] DataTree = new Queue<string>[MaxSize]; //Array of Queue objects, one for each hierarchy level
+
             for (int i = 0; i <= maxLevel; i++)
-                DataTree[i] = new Queue<string>();
+                DataTree[i] = new Queue<string>(); //initialize each queue in the array
 
-            string[] LevelString = new string[MaxSize];
+            string[] LevelString = new string[MaxSize]; //String array saving the current hierarchy steps
 
-            string[] Group = new string[MaxSize];
-
-            for (int i = 0; i < MaxSize; i++)
-                Group[i] = lstGroups.Items[i].ToString();
+            List<string> Group = Hierarchy; //String list for names of hierarchy levels
             #endregion
 
-            TableRows.Select(s => s[Group[Level]] == DBNull.Value ? "" : (string)s[Group[Level]]).Distinct().ToList().ForEach(f => DataTree[Level].Enqueue(f)); //Populate first stack
+            RawItemsData.Select(s => s[Group[Level]] == DBNull.Value ? "" : (string)s[Group[Level]]).Distinct().ToList().ForEach(f => DataTree[Level].Enqueue(f)); //Populate first stack with level 0 data
             
 
-            while(Level >= 0)
+            while(Level >= 0) //Ieterate as long as data is on the level 0 stack
             {
                 if (DataTree[Level].Count > 0)
                 {
 
                     LevelString[Level] = DataTree[Level].Dequeue();
 
-                    IEnumerable<DataRow> StackEnum = TableRows.Where(w => ((w[Group[0]] == DBNull.Value) ? "" : (string)w[Group[0]]) == LevelString[0]);
+                    IEnumerable<DataRow> StackEnum = RawItemsData.Where(w => ((w[Group[0]] == DBNull.Value) ? "" : (string)w[Group[0]]) == LevelString[0]); //Initialize enumerator
 
                     for (int i = 1; i <= Level; i++)
                     {
                         string ls = LevelString[i];
                         string gs = Group[i];
 
-                        StackEnum = StackEnum.Where(w => (w[gs] == DBNull.Value ? "" : (string)w[gs]) == ls);
-
-
+                        StackEnum = StackEnum.Where(w => (w[gs] == DBNull.Value ? "" : (string)w[gs]) == ls); //Filter enumerator for each stack leve
                     }
 
                     if (Level < maxLevel)
                     {
                         List<string> tList = StackEnum.Select(s => s[Group[Level + 1]] == DBNull.Value ? "" : (string)s[Group[Level + 1]]).Distinct().ToList();
-                        tList.ForEach(f => DataTree[Level + 1].Enqueue(f));
+                        tList.ForEach(f => DataTree[Level + 1].Enqueue(f)); //Fill next stack with current filter
 
                         if (LevelString[Level] != "")
                         {
                             int lvl = LevelString.Take(Level + 1).Where(w => w == "").Count();
-                            listBox6.Items.Add((Level - lvl).ToString() + ": " + LevelString[Level]);
+
+                            string[] DisplayLine = new string[lvDataView.Columns.Count];
+
+                            DisplayLine[0] = (Level - lvl).ToString();
+                            DisplayLine[1] = LevelString[Level];
+
+                            if(Level <= maxLevel - 2)
+                            {
+                                for (int i = 2; i < lvDataView.Columns.Count; i++)
+                                    DisplayLine[i] = "";
+
+                                ListViewItem lvi = new ListViewItem(DisplayLine);
+                                lvDataView.Items.Add(lvi);
+                            }
+                            else if(Level == maxLevel - 1)
+                            {
+                                DisplayLine[2] = StackEnum.Sum(su => su["PrimaryQuantity"] == DBNull.Value ? 0 : (double)su["PrimaryQuantity"]).ToString();
+                                DisplayLine[3] = StackEnum.Select(s => s["PrimaryQuantity Units"] == DBNull.Value ? "" : (string)s["PrimaryQuantity Units"]).First();
+                                for (int i = 4; i < lvDataView.Columns.Count; i++)
+                                {
+                                    string cS = lvDataView.Columns[i].Text;
+                                    DisplayLine[i] = StackEnum.Select(s => s[cS] == DBNull.Value ? "" : s[cS].ToString()).First();
+                                }
+                                ListViewItem lvi = new ListViewItem(DisplayLine);
+                                lvDataView.Items.Add(lvi);
+                            }
                         }
                     }
                     else
                     {
-                        int lvl = 0;
                         if (LevelString[Level] != "")
                         {
-                            lvl = LevelString.Take(Level + 1).Where(w => w == "").Count();
+                            int lvl = LevelString.Take(Level + 1).Where(w => w == "").Count(); //Count number of blank levels to shift levels up accordingly;
+                            string[] DisplayLine = new string[lvDataView.Columns.Count];
+
+                            DisplayLine[0] = (Level - lvl).ToString();
+                            DisplayLine[1] = LevelString[Level];
+                            DisplayLine[2] = StackEnum.Sum(su => su["PrimaryQuantity"] == DBNull.Value ? 0 : (double)su["PrimaryQuantity"]).ToString();
+                            DisplayLine[3] = StackEnum.Select(s => s["PrimaryQuantity Units"] == DBNull.Value ? "" : (string)s["PrimaryQuantity Units"]).First();
+                            for (int i = 4; i < lvDataView.Columns.Count; i++)
+                            {
+                                string cS = lvDataView.Columns[i].Text;
+                                DisplayLine[i] = StackEnum.Select(s => s[cS] == DBNull.Value ? "" : s[cS].ToString()).First();
+                            }
+                            ListViewItem lvi = new ListViewItem(DisplayLine);
+                            lvDataView.Items.Add(lvi);
                         }
-
-                        listBox6.Items.Add((Level - lvl).ToString() + ": " + LevelString[Level] + "\t" + StackEnum.Sum(su => su["PrimaryQuantity"] == DBNull.Value ? 0 : (double)su["PrimaryQuantity"]).ToString());
                     }
-
-
-
                     Level = (Level + 1) > maxLevel ? maxLevel : Level + 1;
-
                 }
                 else
                 {
                     Level -= 1;
                 }
             }
-
-
         }
 
-        private void button3_Click(object sender, EventArgs e)
+        private void button4_Click(object sender, EventArgs e)
         {
-            lstGroups.Items.RemoveAt(lstGroups.SelectedIndex);
+            if(ExcelImport != null)
+            {
+                lvDataView.Items.Clear();
+                TraverseData();
+            }
+            else
+            {
+                MessageBox.Show("Load Unsuccessful.");
+            }
         }
 
-    }
+        private void loadQTY_Click(object sender, EventArgs e)
+        {
+            DialogResult dr = openFileDialog1.ShowDialog();
+            if(dr == System.Windows.Forms.DialogResult.OK)
+            {
+                ExcelImport = ReadExcelFile(openFileDialog1.FileName);
 
-    class Hierarchy
-    {
-        public int Level { get; set; }
-        public string Name { get; set; }
+                if(ExcelImport != null)
+                {
+                    InitializeImport();
+                    UpdateUI();
+                }
+                else
+                {
+                    MessageBox.Show("Load Unsuccessful.");
+                }
+            }
+
+        }
+
+        private void fileToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void btnAddHeader_Click(object sender, EventArgs e)
+        {
+            if(lstColumns.SelectedItem != null)
+            {
+                SelectedHeaders.Add((string)lstColumns.SelectedItem);
+            }
+            UpdateUI();
+        }
+
+        private void groupBox1_Enter(object sender, EventArgs e)
+        {
+
+        }
+
+        private void btnRemoveHeader_Click(object sender, EventArgs e)
+        {
+            if(lstHeaders.SelectedItem != null)
+            {
+                string s = (string)lstHeaders.SelectedItem;
+                if(s != "PrimaryQuantity" && s != "PrimaryQuantity Units")
+                SelectedHeaders.Remove(s);
+
+            }
+            UpdateUI();
+        }
+
+        private void exportCCSSheetToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            WriteExcelFile();
+        }
+
+        private void WriteExcelFile()
+        {
+            List<string> h = new List<string>();
+            foreach(ColumnHeader ch in lvDataView.Columns)
+            {
+                h.Add(ch.Text);
+            }
+
+            string headers = "([" + string.Join("] VARCHAR, [", h.ToArray()) + "] VARCHAR)";
+            string headernames = "(" + string.Join(", ", h.ToArray()) + ")";
+
+            string connectionString = GetConnectionString(openFileDialog1.FileName);
+
+            using (OleDbConnection conn = new OleDbConnection(connectionString))
+            {
+                //try
+                //{
+                    conn.Open();
+                    OleDbCommand cmd = new OleDbCommand();
+                    cmd.Connection = conn;
+
+                    cmd.CommandText = "CREATE TABLE [table1$] (id INT, name VARCHAR, datecol DATE );";
+                    cmd.ExecuteNonQuery();
+
+                    cmd.CommandText = "CREATE TABLE CandyExport " + headers;
+                    cmd.ExecuteNonQuery();
+                    foreach(ListViewItem l in lvDataView.Items)
+                    {
+                        string s = l.Text;
+
+                        string writeString = "(" + string.Join(",", s) + ")";
+
+                        cmd.CommandText = "INSERT INTO [Candy Export]" + headernames + " VALUES" + writeString;
+                        cmd.ExecuteNonQuery();
+                    }
+                //}
+                //catch (Exception ex)
+                //{
+                //    MessageBox.Show(ex.Message);
+                //}
+                conn.Close();
+            }
+        }
+
     }
 }
