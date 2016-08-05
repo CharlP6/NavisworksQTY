@@ -28,24 +28,25 @@
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.lstColumns = new System.Windows.Forms.ListBox();
             this.lstGroups = new System.Windows.Forms.ListBox();
             this.lstHeaders = new System.Windows.Forms.ListBox();
-            this.button4 = new System.Windows.Forms.Button();
             this.menuStrip1 = new System.Windows.Forms.MenuStrip();
             this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.loadQty = new System.Windows.Forms.ToolStripMenuItem();
+            this.exportCCSSheetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
             this.lvDataView = new System.Windows.Forms.ListView();
+            this.lvcLevel = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader1 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.btnRemoveHeader = new System.Windows.Forms.Button();
             this.btnAddHeader = new System.Windows.Forms.Button();
             this.label1 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
             this.label3 = new System.Windows.Forms.Label();
             this.lstStatus = new System.Windows.Forms.ListBox();
-            this.lvcLevel = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.columnHeader1 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.exportCCSSheetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.saveFileDialog1 = new System.Windows.Forms.SaveFileDialog();
             this.menuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -72,16 +73,6 @@
             this.lstHeaders.Name = "lstHeaders";
             this.lstHeaders.Size = new System.Drawing.Size(165, 212);
             this.lstHeaders.TabIndex = 4;
-            // 
-            // button4
-            // 
-            this.button4.Location = new System.Drawing.Point(525, 47);
-            this.button4.Name = "button4";
-            this.button4.Size = new System.Drawing.Size(117, 23);
-            this.button4.TabIndex = 7;
-            this.button4.Text = "Generate CCS Data";
-            this.button4.UseVisualStyleBackColor = true;
-            this.button4.Click += new System.EventHandler(this.button4_Click);
             // 
             // menuStrip1
             // 
@@ -110,6 +101,13 @@
             this.loadQty.Text = "Load Take-off Sheet";
             this.loadQty.Click += new System.EventHandler(this.loadQTY_Click);
             // 
+            // exportCCSSheetToolStripMenuItem
+            // 
+            this.exportCCSSheetToolStripMenuItem.Name = "exportCCSSheetToolStripMenuItem";
+            this.exportCCSSheetToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.exportCCSSheetToolStripMenuItem.Text = "Export CCS Sheet";
+            this.exportCCSSheetToolStripMenuItem.Click += new System.EventHandler(this.exportCCSSheetToolStripMenuItem_Click);
+            // 
             // openFileDialog1
             // 
             this.openFileDialog1.FileName = "OFD";
@@ -126,10 +124,20 @@
             this.lvDataView.GridLines = true;
             this.lvDataView.Location = new System.Drawing.Point(12, 265);
             this.lvDataView.Name = "lvDataView";
-            this.lvDataView.Size = new System.Drawing.Size(984, 275);
+            this.lvDataView.Size = new System.Drawing.Size(984, 286);
             this.lvDataView.TabIndex = 11;
             this.lvDataView.UseCompatibleStateImageBehavior = false;
             this.lvDataView.View = System.Windows.Forms.View.Details;
+            // 
+            // lvcLevel
+            // 
+            this.lvcLevel.Text = "Level";
+            this.lvcLevel.Width = 50;
+            // 
+            // columnHeader1
+            // 
+            this.columnHeader1.Text = "Bill Item";
+            this.columnHeader1.Width = 250;
             // 
             // btnRemoveHeader
             // 
@@ -185,31 +193,18 @@
             this.lstStatus.FormattingEnabled = true;
             this.lstStatus.Location = new System.Drawing.Point(648, 47);
             this.lstStatus.Name = "lstStatus";
-            this.lstStatus.Size = new System.Drawing.Size(348, 212);
+            this.lstStatus.Size = new System.Drawing.Size(348, 160);
             this.lstStatus.TabIndex = 0;
             // 
-            // lvcLevel
+            // saveFileDialog1
             // 
-            this.lvcLevel.Text = "Level";
-            this.lvcLevel.Width = 50;
-            // 
-            // columnHeader1
-            // 
-            this.columnHeader1.Text = "Bill Item";
-            this.columnHeader1.Width = 250;
-            // 
-            // exportCCSSheetToolStripMenuItem
-            // 
-            this.exportCCSSheetToolStripMenuItem.Name = "exportCCSSheetToolStripMenuItem";
-            this.exportCCSSheetToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
-            this.exportCCSSheetToolStripMenuItem.Text = "Export CCS Sheet";
-            this.exportCCSSheetToolStripMenuItem.Click += new System.EventHandler(this.exportCCSSheetToolStripMenuItem_Click);
+            this.saveFileDialog1.Filter = "(*.xlsx)|*.xlsx";
             // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1008, 552);
+            this.ClientSize = new System.Drawing.Size(1008, 563);
             this.Controls.Add(this.lstStatus);
             this.Controls.Add(this.label3);
             this.Controls.Add(this.label2);
@@ -217,11 +212,11 @@
             this.Controls.Add(this.btnAddHeader);
             this.Controls.Add(this.btnRemoveHeader);
             this.Controls.Add(this.lvDataView);
-            this.Controls.Add(this.button4);
             this.Controls.Add(this.lstHeaders);
             this.Controls.Add(this.lstGroups);
             this.Controls.Add(this.lstColumns);
             this.Controls.Add(this.menuStrip1);
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MainMenuStrip = this.menuStrip1;
             this.Name = "Form1";
             this.Text = "Form1";
@@ -237,7 +232,6 @@
         private System.Windows.Forms.ListBox lstColumns;
         private System.Windows.Forms.ListBox lstGroups;
         private System.Windows.Forms.ListBox lstHeaders;
-        private System.Windows.Forms.Button button4;
         private System.Windows.Forms.MenuStrip menuStrip1;
         private System.Windows.Forms.ToolStripMenuItem fileToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem loadQty;
@@ -252,6 +246,7 @@
         private System.Windows.Forms.ColumnHeader lvcLevel;
         private System.Windows.Forms.ColumnHeader columnHeader1;
         private System.Windows.Forms.ToolStripMenuItem exportCCSSheetToolStripMenuItem;
+        private System.Windows.Forms.SaveFileDialog saveFileDialog1;
     }
 }
 

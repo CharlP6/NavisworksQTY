@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Data.OleDb;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -28,8 +29,9 @@ namespace WindowsFormsApplication7
 
             // XLSX - Excel 2007, 2010, 2012, 2013
             props["Provider"] = "Microsoft.ACE.OLEDB.12.0;";
-            props["Extended Properties"] = "Excel 12.0 XML";
             props["Data Source"] = filePath;
+            props["Extended Properties"] = "Excel 12.0 XML";
+
 
             // XLS - Excel 2003 and Older
             //props["Provider"] = "Microsoft.Jet.OLEDB.4.0";
@@ -82,6 +84,7 @@ namespace WindowsFormsApplication7
                         catch (Exception ex)
                         {
                             MessageBox.Show(ex.Message);
+                            lstStatus.Items.Add("Excel load failed: " + ex.Message);
                         }
 
                         ds.Tables.Add(dt);
@@ -89,10 +92,12 @@ namespace WindowsFormsApplication7
 
                     cmd = null;
                     conn.Close();
+                    lstStatus.Items.Add("Excel load success...");
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(ex.Message);                
+                    MessageBox.Show(ex.Message);
+                    lstStatus.Items.Add("Excel load failed: " + ex.Message);
                 }
             }
             return ds;
@@ -107,6 +112,8 @@ namespace WindowsFormsApplication7
         List<string> Hierarchy = new List<string>();
         List<string> RawItemsHeaders = new List<string>();
         List<string> SelectedHeaders = new List<string>();
+
+        List<string[]> Processed = new List<string[]>();
 
         #endregion
 
@@ -178,6 +185,13 @@ namespace WindowsFormsApplication7
                 {
                     MessageBox.Show("Could not find \"PrimaryQuantity Units\" header.");
                 }
+
+                if (RawItemsHeaders.Contains("WBS")) SelectedHeaders.Add("WBS");
+                else
+                {
+                    MessageBox.Show("Could not find \"WBS\" header.");
+                }
+
             }
             else
             {
@@ -256,7 +270,7 @@ namespace WindowsFormsApplication7
 
                             string[] DisplayLine = new string[lvDataView.Columns.Count];
 
-                            DisplayLine[0] = (Level - lvl).ToString();
+                            DisplayLine[0] = (Level - lvl+1).ToString();
                             DisplayLine[1] = LevelString[Level];
 
                             if(Level <= maxLevel - 2)
@@ -266,6 +280,7 @@ namespace WindowsFormsApplication7
 
                                 ListViewItem lvi = new ListViewItem(DisplayLine);
                                 lvDataView.Items.Add(lvi);
+                                Processed.Add(DisplayLine);
                             }
                             else if(Level == maxLevel - 1)
                             {
@@ -278,6 +293,7 @@ namespace WindowsFormsApplication7
                                 }
                                 ListViewItem lvi = new ListViewItem(DisplayLine);
                                 lvDataView.Items.Add(lvi);
+                                Processed.Add(DisplayLine);
                             }
                         }
                     }
@@ -288,7 +304,7 @@ namespace WindowsFormsApplication7
                             int lvl = LevelString.Take(Level + 1).Where(w => w == "").Count(); //Count number of blank levels to shift levels up accordingly;
                             string[] DisplayLine = new string[lvDataView.Columns.Count];
 
-                            DisplayLine[0] = (Level - lvl).ToString();
+                            DisplayLine[0] = (Level - lvl+1).ToString();
                             DisplayLine[1] = LevelString[Level];
                             DisplayLine[2] = StackEnum.Sum(su => su["PrimaryQuantity"] == DBNull.Value ? 0 : (double)su["PrimaryQuantity"]).ToString();
                             DisplayLine[3] = StackEnum.Select(s => s["PrimaryQuantity Units"] == DBNull.Value ? "" : (string)s["PrimaryQuantity Units"]).First();
@@ -299,6 +315,7 @@ namespace WindowsFormsApplication7
                             }
                             ListViewItem lvi = new ListViewItem(DisplayLine);
                             lvDataView.Items.Add(lvi);
+                            Processed.Add(DisplayLine);
                         }
                     }
                     Level = (Level + 1) > maxLevel ? maxLevel : Level + 1;
@@ -310,30 +327,26 @@ namespace WindowsFormsApplication7
             }
         }
 
-        private void button4_Click(object sender, EventArgs e)
-        {
-            if(ExcelImport != null)
-            {
-                lvDataView.Items.Clear();
-                TraverseData();
-            }
-            else
-            {
-                MessageBox.Show("Load Unsuccessful.");
-            }
-        }
-
         private void loadQTY_Click(object sender, EventArgs e)
         {
+            Hierarchy.Clear();
+            RawItemsData.Clear();
+            RawItemsHeaders.Clear();
+            SelectedHeaders.Clear();
+            Processed.Clear();
+
             DialogResult dr = openFileDialog1.ShowDialog();
             if(dr == System.Windows.Forms.DialogResult.OK)
             {
                 ExcelImport = ReadExcelFile(openFileDialog1.FileName);
 
-                if(ExcelImport != null)
+                if (ExcelImport != null)
                 {
                     InitializeImport();
                     UpdateUI();
+                    lvDataView.Items.Clear();
+                    TraverseData();
+
                 }
                 else
                 {
@@ -355,11 +368,12 @@ namespace WindowsFormsApplication7
                 SelectedHeaders.Add((string)lstColumns.SelectedItem);
             }
             UpdateUI();
-        }
-
-        private void groupBox1_Enter(object sender, EventArgs e)
-        {
-
+            if (ExcelImport != null)
+            {
+                lvDataView.Items.Clear();
+                Processed.Clear();
+                TraverseData();
+            }
         }
 
         private void btnRemoveHeader_Click(object sender, EventArgs e)
@@ -372,11 +386,29 @@ namespace WindowsFormsApplication7
 
             }
             UpdateUI();
+            if (ExcelImport != null)
+            {
+                lvDataView.Items.Clear();
+                Processed.Clear();
+                TraverseData();
+            }
         }
 
         private void exportCCSSheetToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            WriteExcelFile();
+            //WriteExcelFile();
+            DialogResult dr = saveFileDialog1.ShowDialog();
+            if (ExcelImport != null)
+            {
+                if (dr == DialogResult.OK)
+                {
+                    SaveExcel();
+                }
+            }
+            else
+            {
+                MessageBox.Show("No data found to export...");
+            }
         }
 
         private void WriteExcelFile()
@@ -386,39 +418,61 @@ namespace WindowsFormsApplication7
             {
                 h.Add(ch.Text);
             }
+            string headernames = string.Join(", ", h.Select(s => s.Replace(",", ".")).ToArray());
+            
+            DialogResult dr = saveFileDialog1.ShowDialog();
 
-            string headers = "([" + string.Join("] VARCHAR, [", h.ToArray()) + "] VARCHAR)";
-            string headernames = "(" + string.Join(", ", h.ToArray()) + ")";
+            if (dr == DialogResult.OK)
+            {
+                using (FileStream fs = new FileStream(saveFileDialog1.FileName, FileMode.Create, FileAccess.Write))
+                {
+                    using(StreamWriter sw = new StreamWriter(fs,Encoding.UTF8))
+                    {
+                        sw.WriteLine(headernames);
+                        foreach(string[] s in Processed)
+                        {
+                            sw.WriteLine(string.Join(",", s.Select(se => se.Replace(",", ".")).ToArray()));
+                        }
+                    }
+                }
+            }
+        }
 
-            string connectionString = GetConnectionString(openFileDialog1.FileName);
+        void SaveExcel()
+        {
+            string connectionString = GetConnectionString(saveFileDialog1.FileName);
+
+            List<string> h = new List<string>();
+            foreach (ColumnHeader ch in lvDataView.Columns)
+            {
+                h.Add(ch.Text);
+            }
+
+            string ColumnDeclaration = "([" + string.Join("] VARCHAR, [", h.ToArray()) + "] VARCHAR)";
+            string ColumnNames = "([" + string.Join("],[", h.ToArray()) + "])";
 
             using (OleDbConnection conn = new OleDbConnection(connectionString))
             {
-                //try
-                //{
-                    conn.Open();
-                    OleDbCommand cmd = new OleDbCommand();
-                    cmd.Connection = conn;
+                conn.Open();
+                OleDbCommand cmd = new OleDbCommand();
+                cmd.Connection = conn;
 
-                    cmd.CommandText = "CREATE TABLE [table1$] (id INT, name VARCHAR, datecol DATE );";
+                cmd.CommandText = "CREATE TABLE [CandyExport] " + ColumnDeclaration;
+                cmd.ExecuteNonQuery();
+
+                foreach(string[] s in Processed)
+                {
+                    string Written = string.Join(",", s.Select(se => "?").ToArray());
+                    cmd.CommandText = "INSERT INTO [CandyExport]" + ColumnNames + " VALUES(" + Written + ")";
+
+                    s.Select(se => se).ToList().ForEach(f => cmd.Parameters.AddWithValue("?", f));
+
                     cmd.ExecuteNonQuery();
+                    cmd.Parameters.Clear();
+                }
 
-                    cmd.CommandText = "CREATE TABLE CandyExport " + headers;
-                    cmd.ExecuteNonQuery();
-                    foreach(ListViewItem l in lvDataView.Items)
-                    {
-                        string s = l.Text;
 
-                        string writeString = "(" + string.Join(",", s) + ")";
 
-                        cmd.CommandText = "INSERT INTO [Candy Export]" + headernames + " VALUES" + writeString;
-                        cmd.ExecuteNonQuery();
-                    }
-                //}
-                //catch (Exception ex)
-                //{
-                //    MessageBox.Show(ex.Message);
-                //}
                 conn.Close();
             }
         }
